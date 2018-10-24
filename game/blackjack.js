@@ -68,7 +68,7 @@ class Deck {
         this.state.cards.push(new Card(rank, suit))
       }
     }
-    console.log('deck refresh', this.state.cards)
+    //console.log('deck refresh', this.state.cards)
   }
 
   //can shuffle the cards
@@ -91,17 +91,17 @@ class Deck {
     this.state.cards[second_index] = temp;
   }
   render() {
-    console.log('deck render', this.state.cards)
+    //console.log('deck render', this.state.cards)
     let html = printCards(this.state.cards)
     let header = '<div><h3>Deck:</h3></div>'
-    $("#deck").html(header + html)
+    $("#deck").html(header + html).addClass('float-box')
   }
 }
 class Player {
   //contains a hand (array of cards
   //contains a score (sum of all cards values, -1 means bust)
-  constructor(deck) {
-    this.deck = deck
+  constructor(game) {
+    this.game = game
     this.state = {
       hand: [],
       score: 0,
@@ -112,6 +112,7 @@ class Player {
   //can be given a card
   receiveCard(card) {
     this.state.hand.push(card)
+    this.calculateScore()
   }
   //hand can be reset
   resetHand() {
@@ -119,21 +120,25 @@ class Player {
   }
   //can hit (ask for another card)
   hit() {
-    let card = this.deck.deal()
-    this.receiveCard(card)
-    this.calculateScore()
+    console.log(this.game)
+    this.game.dealCardTo(this)
+    this.render()
   }
   //can stay (stop receiving cards)
   stay() {
     this.state.finished = true
   }
+  getScore() { 
+    return this.state.score 
+  }
+
   //can calculate score
   calculateScore() {
     this.state.score = 0
     for(let index in this.state.hand) 
     {
       let card = this.state.hand[index]
-      this.state.score += card.value
+      this.state.score += +card.state.value
     }
     if(this.state.score > 21) {
       this.state.score = -1
@@ -141,27 +146,33 @@ class Player {
     }
   }
   render() {
-    console.log(this.state.element + ' render', this.state.hand)
+    //console.log(this.state.element + ' render', this.state.hand)
     let hand = printCards(this.state.hand)
     let header = '<div><h3>' + this.state.element + ':</h3></div>'
-    let html = '<div id="' + this.state.element + '-hand">' + header + hand + '</div>';
-    $("#" + this.state.element).html(html)
+    let html = '<div id="' + this.state.element + '-hand">' + header + hand + '</div>' +
+               '<div id="' + this.state.element + '-results">' + this.state.score.toString() + '</div>'
+    $('#' + this.state.element).html(html).addClass('float-box')
   }
 }
 class Dealer extends Player {
-  constructor(deck) {
-    super(deck)
-    this.state.element = "dealer"
+  constructor(game) {
+    super(game)
+    this.state.element = 'dealer'
   }
   //does everything a player does
   //can finish turn, making decisions whether to hit or stay
   finishTurn() {
+    console.log('finishing dealer turn')
     while(this.state.finished === false) {
-      if(this.state.score >= 17) {
-        this.stay()
-      }
-      else {
+      if(this.state.score < this.game.state.player.getScore())
+      {
+        console.log('player is winning, hit')
         this.hit()
+      }
+      else
+      {
+        console.log('dealer is winning, stay')
+        this.stay()
       }
     }
   }
@@ -174,10 +185,15 @@ class Game {
       player: {},
       dealer: {}
     }
-    this.state.player = new Player(this.state.deck)
-    this.state.dealer = new Dealer(this.state.deck)
+    this.state.player = new Player(this)
+    this.state.dealer = new Dealer(this)
+    this.playerHitHandler = this.playerHit.bind(this)
+    this.playerStayHandler = this.playerStay.bind(this)
+    this.replayGameHandler = this.startGame.bind(this)
   }
   startGame() {
+    console.log('starting game')
+
     let player = this.state.player
     let dealer = this.state.dealer
     let deck = this.state.deck
@@ -193,12 +209,23 @@ class Game {
     this.dealCardTo(player)
     this.dealCardTo(dealer)
 
+    console.log(this.state.player, this.state.dealer)
+
     this.displayBoard()
     this.enablePlayerControl()
   }
   displayBoard() {
-    let html = '<div id="deck"></div><div id="player"></div><div id="dealer"></div><div id="result"></div>'
-    $("#game").html(html)
+    let html = '<div id="commands"></div><div id="deck"></div><div id="player"></div><div id="dealer"></div>' +
+               '<div id="winner"></div>'
+    $('#game').html(html)
+
+    let hit = '<button id="hit-button" type="button" disabled>Hit</button>'
+    let stay = '<button id="stay-button" type="button" disabled>Stay</button>'
+    let replay = '<button id="replay-button" type="button" disabled>Replay</button>'
+    $('#commands').html('<div>' + hit + stay + replay + '</div>')
+
+    let results = '<div id="player-results"></div><div id="dealer-results"></div>'
+    $('#results').html(results)
 
     this.state.deck.render()
     this.state.player.render()
@@ -209,71 +236,86 @@ class Game {
     player.receiveCard(card)
   }
   playerHit() {
+    console.log('player hit')
     this.state.player.hit()
     this.checkForEndOfGame()
   }
-  playerStay() {    
+  playerStay() {
+    console.log('player stay')
     this.state.player.stay()
     this.checkForEndOfGame()
   }
   checkForEndOfGame() {
-    if(this.state.player.finished === true) {
+    console.log('checking end of game, player', this.state.player)
+    if(this.state.player.state.finished === true) {
+      console.log('player is finished')
       this.disablePlayerControl()
       this.determineWinner()
     }
   }
   determineWinner() {
+    console.log('determining winner')
+
     let player = this.state.player
     let dealer = this.state.dealer
  
     if(player.score != -1) {
       dealer.finishTurn()
-
-      if(player.score > dealer.score) {
-        this.displayPlayerWin()
+      let playerScore = player.getScore()
+      let dealerScore = dealer.getScore()
+      console.log('dealer turn finished')
+      console.log('player score', playerScore)
+      console.log('dealer score', dealerScore)
+      
+      if(playerScore > dealerScore) {
+        this.displayResults('player wins')
       }
-      else if(player.score === dealer.score) {
-        this.displayPlayerDraw()
+      else if(playerScore === dealerScore) {
+        this.displayResults('draw')
       }
       else {
-        this.displayPlayerLose()
+        this.displayResults('player loses')
       }
     }
     else {
-      this.displayPlayerLose()
+      this.displayResults('player loses')
     }
   }
-  displayPlayerWin() {
-
+  displayResults(result) {
+    console.log(result)
+    let header = '<div><h3>Result:</h3></div>'
+    $('#winner').html(header + '<div>' + result + '</div>').addClass('float-box')
   }
-  displayPlayerLose() {
-
-  }
-  displayPlayerDraw() {
-
-  }
-  //contains one player
-  //contains one dealer
-  //gives a card to player
-  //gives a card to dealer
-  //gives a card to player
-  //gives a card to dealer
-  //gives control of the game to the player
-  //player eventually 'stays' or 'goes bust'
-  //dealer either finishes turn or wins
-  //if dealer finished turn, determine winner
-
 
   enablePlayerControl() {
+    console.log('enabling player control')
     //enable the player hit / stay buttons
+    let hit = $('#hit-button')
+    let stay = $('#stay-button')
+    let replay = $('#replay-button')
+
+    hit.removeAttr('disabled')
+    stay.removeAttr('disabled')
+    replay.removeAttr('disabled')
+
+    hit.click(this.playerHitHandler)
+    stay.click(this.playerStayHandler)
+    replay.click(this.replayGameHandler)
   }
   disablePlayerControl() {
-
+    console.log('disabling player control')
+    if($('#hit-button').is('disabled') === false)
+    {
+      $('#hit-button').attr('disabled', 'disabled')
+    }
+    if($('#stay-button').is('disabled') === false)
+    {
+      $('#stay-button').attr('disabled', 'disabled')
+    }
   }
 }
 
 (function () {
   var game = new Game()
   game.startGame()
-  console.log('game started')
 }());

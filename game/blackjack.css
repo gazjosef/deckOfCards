@@ -1,0 +1,13 @@
+.float-box {
+  display: inline-block;
+  vertical-align: top;
+  margin: 10px;
+}
+
+button {
+  background: green;
+  color: white;
+}
+button:disabled {
+  background: red;
+}
